@@ -67,6 +67,10 @@
   color-scheme: dark;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html, body {
   height: 100%;
   margin: 0;
@@ -872,6 +876,10 @@ td.payee {
   -webkit-backdrop-filter: blur(3px);
 }
 
+.overlay[hidden] {
+  display: none !important;
+}
+
 .sheet {
   background: var(--surface);
   border-radius: 14px;
@@ -978,6 +986,10 @@ td.payee {
   align-items: center;
   gap: 10px;
   pointer-events: auto;
+}
+
+.toast[hidden] {
+  display: none !important;
 }
 
 .toast button {
