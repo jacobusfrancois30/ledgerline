@@ -81,6 +81,9 @@ const VIEWS = {
 
 // Auto-save debounce
 let saveTimeout = null;
+// Changes waiting to be written. Each commit adds to this instead of replacing
+// it, so a quick second change can't drop the first one's transactions.
+const pendingSave = { ledger: false, txns: new Map(), deleted: new Set() };
 function commitState({ ledgerDirty = false, updatedTxns = [], deletedTxIds = [] } = {}) {
   if (sampleMode) {
     sampleMode = false;
@@ -88,33 +91,48 @@ function commitState({ ledgerDirty = false, updatedTxns = [], deletedTxIds = [] 
     updatedTxns = [...T];
   }
 
+  if (ledgerDirty) pendingSave.ledger = true;
+  for (const t of updatedTxns) { pendingSave.txns.set(t.id, t); pendingSave.deleted.delete(t.id); }
+  for (const id of deletedTxIds) { pendingSave.deleted.add(id); pendingSave.txns.delete(id); }
+
   setSaveStatus('saving');
   clearTimeout(saveTimeout);
-
-  saveTimeout = setTimeout(async () => {
-    try {
-      if (ledgerDirty) {
-        await saveLedger(L, {
-          geminiKey: metadata?.geminiKey,
-          geminiModel: metadata?.geminiModel,
-          pinHash: metadata?.pinHash
-        });
-      }
-      if (updatedTxns.length) {
-        await saveTransactions(updatedTxns);
-      }
-      if (deletedTxIds.length) {
-        await deleteTransactions(deletedTxIds);
-      }
-      setSaveStatus('saved');
-    } catch (err) {
-      console.error('Error saving to IndexedDB:', err);
-      setSaveStatus('error', 'Couldn’t save to IndexedDB');
-    }
-  }, 350);
+  saveTimeout = setTimeout(flushSave, 350);
 
   render();
 }
+
+async function flushSave() {
+  const job = { ledger: pendingSave.ledger, txns: [...pendingSave.txns.values()], deleted: [...pendingSave.deleted] };
+  pendingSave.ledger = false; pendingSave.txns.clear(); pendingSave.deleted.clear();
+  try {
+    if (job.ledger) {
+      await saveLedger(L, {
+        geminiKey: metadata?.geminiKey,
+        geminiModel: metadata?.geminiModel,
+        pinHash: metadata?.pinHash
+      });
+    }
+    if (job.txns.length) await saveTransactions(job.txns);
+    if (job.deleted.length) await deleteTransactions(job.deleted);
+    setSaveStatus('saved');
+  } catch (err) {
+    console.error('Error saving to IndexedDB:', err);
+    // Put the work back so the next save retries it
+    if (job.ledger) pendingSave.ledger = true;
+    job.txns.forEach(t => { if (!pendingSave.txns.has(t.id) && !pendingSave.deleted.has(t.id)) pendingSave.txns.set(t.id, t); });
+    job.deleted.forEach(id => { if (!pendingSave.txns.has(id)) pendingSave.deleted.add(id); });
+    setSaveStatus('error', 'Couldn’t save to IndexedDB');
+  }
+}
+
+// Write anything still waiting when the app is closed or sent to the background
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && (pendingSave.ledger || pendingSave.txns.size || pendingSave.deleted.size)) {
+    clearTimeout(saveTimeout);
+    flushSave();
+  }
+});
 
 function setSaveStatus(status, customMsg = '') {
   const el = document.querySelector('#savepill');
@@ -1277,6 +1295,7 @@ function initEventListeners() {
           t.disabled = true;
           // Cancel any save still waiting to run, or it would write old data back
           clearTimeout(saveTimeout);
+          pendingSave.ledger = false; pendingSave.txns.clear(); pendingSave.deleted.clear();
           clearAllData()
             .then(async () => {
               // Start from an empty ledger (not sample data) and save it, so a
