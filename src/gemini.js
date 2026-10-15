@@ -16,10 +16,49 @@ export class GeminiError extends Error {
   }
 }
 
+const API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+
+// Models the key can actually use, filled in by testApiKey() for the model picker
+export let discoveredModels = [];
+
 /**
  * Core caller for Gemini REST generateContent API
  */
 const sleep = ms => new Promise(res => setTimeout(res, ms));
+
+// fetch() never gives up on its own, so a request Google doesn't answer would
+// spin forever. Abort after `ms` and report it as a timeout.
+async function fetchWithTimeout(url, options, ms) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...options, signal: ctrl.signal });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new GeminiError(`Gemini didn’t answer within ${Math.round(ms / 1000)} seconds. Check your connection, or pick a different model in Setup.`, 'TIMEOUT');
+    }
+    throw new GeminiError('Network error connecting to Gemini API. Check your internet connection.', 'NETWORK_ERROR');
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Turn an error response into a message that says what to fix
+async function errorFromResponse(response, model) {
+  let errData = {};
+  try { errData = await response.json(); } catch {}
+  const apiMsg = errData.error?.message || response.statusText || '';
+  const s = response.status;
+  if (s === 404) {
+    return new GeminiError(`The model "${model}" isn’t available for your key. Tap Test connection to find one that works, or pick another model in Setup.`, 'MODEL_NOT_FOUND');
+  }
+  if (s === 401 || s === 403 || (s === 400 && /api key|API_KEY|credential|unauthenticated/i.test(apiMsg))) {
+    return new GeminiError('Google rejected this API key. Copy the key again from aistudio.google.com/app/apikey (the Gemini API key, not a token or client ID) and paste it with Replace key.', 'AUTH_ERROR');
+  }
+  if (s === 429) return new GeminiError('Gemini rate limit or free quota reached. Wait a minute and try again.', 'RATE_LIMIT');
+  if (s === 503) return new GeminiError('Google’s servers are busy right now (503). Try again shortly, or pick a different model in Setup.', 'HIGH_DEMAND');
+  return new GeminiError(`Gemini error (${s}): ${apiMsg}`.trim(), 'API_ERROR');
+}
 
 export async function callGemini({
   apiKey,
@@ -29,7 +68,8 @@ export async function callGemini({
   generationConfig,
   stream = false,
   onChunk,
-  retryCount = 0
+  retryCount = 0,
+  timeoutMs = stream ? 90000 : 60000
 }) {
   if (!navigator.onLine) {
     throw new GeminiError('You appear to be offline. Connect to the internet to use AI features.', 'OFFLINE');
@@ -40,8 +80,8 @@ export async function callGemini({
   }
 
   const endpoint = stream
-    ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`
-    : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    ? `${API_BASE}/models/${model}:streamGenerateContent?alt=sse`
+    : `${API_BASE}/models/${model}:generateContent`;
 
   const body = {
     contents
@@ -57,19 +97,15 @@ export async function callGemini({
     body.generationConfig = generationConfig;
   }
 
-  let response;
-  try {
-    response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey.trim()
-      },
-      body: JSON.stringify(body)
-    });
-  } catch (err) {
-    throw new GeminiError('Network error connecting to Gemini API. Check your internet connection.', 'NETWORK_ERROR');
-  }
+  // Receipt photos and long answers can take a while; nothing should hang forever
+  const response = await fetchWithTimeout(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey.trim()
+    },
+    body: JSON.stringify(body)
+  }, timeoutMs);
 
   // Handle transient 503 (high demand) or 429 with automatic retry
   if (!response.ok && (response.status === 503 || response.status === 429) && retryCount < 2) {
@@ -82,26 +118,13 @@ export async function callGemini({
       generationConfig,
       stream,
       onChunk,
-      retryCount: retryCount + 1
+      retryCount: retryCount + 1,
+      timeoutMs
     });
   }
 
   if (!response.ok) {
-    let errData = {};
-    try {
-      errData = await response.json();
-    } catch {}
-
-    const errMessage = errData.error?.message || response.statusText;
-    if (response.status === 400 || response.status === 403) {
-      throw new GeminiError('Invalid Gemini API key or access denied. Check your key in Setup.', 'AUTH_ERROR');
-    } else if (response.status === 429) {
-      throw new GeminiError('Gemini rate limit exceeded. Please wait a minute and try again.', 'RATE_LIMIT');
-    } else if (response.status === 503) {
-      throw new GeminiError('Google servers are momentarily busy (503). Retrying in a few moments, or select Gemini 2.0 Flash in the Model dropdown below.', 'HIGH_DEMAND');
-    } else {
-      throw new GeminiError(`Gemini error (${response.status}): ${errMessage}`, 'API_ERROR');
-    }
+    throw await errorFromResponse(response, model);
   }
 
   if (stream && response.body && typeof onChunk === 'function') {
@@ -310,6 +333,48 @@ Output strictly valid JSON matching the schema.`;
 }
 
 /**
+ * Bank statement PDF (any bank, including scanned statements)
+ */
+export async function parseStatementPdf({ apiKey, model, pdfBase64, currentCurrency = 'ZAR' }) {
+  const systemInstruction = `You extract transactions from bank statement PDFs (FNB, Capitec, Absa, Nedbank, Standard Bank, Discovery, TymeBank and others).
+Return every transaction line in the statement's transaction table, in order. Ignore opening/closing balances, totals, fee summaries and adverts.
+For each transaction:
+- date: YYYY-MM-DD. Use the statement period to work out the year when lines only show day and month.
+- payee: the description as printed, without card numbers or reference numbers.
+- amount: the transaction amount as a positive number (not the running balance).
+- direction: "credit" for money in (on FNB statements these amounts end in "Cr"), otherwise "debit".
+Amounts are in ${currentCurrency}. Output strictly valid JSON matching the schema.`;
+
+  const generationConfig = {
+    responseMimeType: 'application/json',
+    responseSchema: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          date: { type: 'STRING' },
+          payee: { type: 'STRING' },
+          amount: { type: 'NUMBER' },
+          direction: { type: 'STRING', enum: ['debit', 'credit'] }
+        },
+        required: ['date', 'payee', 'amount', 'direction']
+      }
+    }
+  };
+
+  const contents = [{
+    role: 'user',
+    parts: [
+      { inlineData: { mimeType: 'application/pdf', data: pdfBase64 } },
+      { text: 'Extract all transactions from this bank statement.' }
+    ]
+  }];
+
+  const rawJson = await callGemini({ apiKey, model, contents, systemInstruction, generationConfig, timeoutMs: 120000 });
+  return JSON.parse(rawJson);
+}
+
+/**
  * 5c. Smart Categorize Uncategorized Payees
  */
 export async function smartCategorize({ apiKey, model, uniquePayees, categories }) {
@@ -449,16 +514,38 @@ Extract:
 /**
  * Test API key validity
  */
+// Checks the key by listing the models it can use (fast, uses no quota), then
+// checks the chosen model is one of them. Resolves { model, switchedFrom }:
+// if the chosen model isn't available, it picks the best Flash model instead.
 export async function testApiKey(apiKey, model = DEFAULT_MODEL) {
-  const contents = [
-    {
-      role: 'user',
-      parts: [{ text: 'Respond with "OK" if connection is successful.' }]
-    }
-  ];
-  return callGemini({
-    apiKey,
-    model,
-    contents
-  });
+  if (!navigator.onLine) {
+    throw new GeminiError('You appear to be offline. Connect to the internet and try again.', 'OFFLINE');
+  }
+  if (!apiKey || !apiKey.trim()) {
+    throw new GeminiError('Add your Gemini API key first.', 'NO_KEY');
+  }
+
+  const response = await fetchWithTimeout(`${API_BASE}/models?pageSize=1000`, {
+    headers: { 'x-goog-api-key': apiKey.trim() }
+  }, 15000);
+  if (!response.ok) throw await errorFromResponse(response, model);
+
+  const data = await response.json();
+  const usable = (data.models || [])
+    .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+    .map(m => ({ id: String(m.name || '').replace(/^models\//, ''), name: m.displayName || m.name }))
+    .filter(m => /^gemini-/.test(m.id) && !/(image|tts|audio|live|embedding|vision|robotics|computer-use)/i.test(m.id));
+  discoveredModels = usable;
+
+  if (usable.some(m => m.id === model)) return { model, switchedFrom: null };
+
+  // Prefer a stable Flash model, newest version first
+  const ver = id => parseFloat((id.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || 0);
+  const pick = [...usable]
+    .filter(m => /flash/.test(m.id))
+    .sort((a, b) => (/(preview|exp|lite)/.test(a.id) - /(preview|exp|lite)/.test(b.id)) || ver(b.id) - ver(a.id))[0] || usable[0];
+  if (!pick) {
+    throw new GeminiError('Your key works, but it has no Gemini text models available. Check the key’s project in Google AI Studio.', 'MODEL_NOT_FOUND');
+  }
+  return { model: pick.id, switchedFrom: model };
 }

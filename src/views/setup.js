@@ -10,7 +10,15 @@ import {
   uid,
   round2
 } from '../model.js';
-import { AVAILABLE_MODELS } from '../gemini.js';
+import { AVAILABLE_MODELS, DEFAULT_MODEL, discoveredModels } from '../gemini.js';
+
+// After Test connection, list the models the key can really use; before that,
+// the built-in list. Always include the current choice so the picker shows it.
+function modelOptions(current) {
+  const list = discoveredModels.length ? discoveredModels : AVAILABLE_MODELS;
+  const cur = current || DEFAULT_MODEL;
+  return list.some(m => m.id === cur) ? list : [{ id: cur, name: cur }, ...list];
+}
 import { openSheet, closeSheet, confirmBtn, fld } from '../ui/sheet.js';
 import { toast } from '../ui/toast.js';
 
@@ -72,8 +80,8 @@ export function renderSetup({ ledger, transactions, metadata, geminiKey, geminiM
           <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:6px">
             <label style="font-size:0.88rem;font-weight:600;color:var(--muted)">Model:</label>
             <select id="s-gemini-model" style="max-width:340px">
-              ${AVAILABLE_MODELS.map(m => `
-                <option value="${esc(m.id)}"${m.id === (geminiModel || 'gemini-3.8-flash') ? ' selected' : ''}>
+              ${modelOptions(geminiModel).map(m => `
+                <option value="${esc(m.id)}"${m.id === (geminiModel || DEFAULT_MODEL) ? ' selected' : ''}>
                   ${esc(m.name)}
                 </option>
               `).join('')}

@@ -1181,15 +1181,35 @@ function initEventListeners() {
 
       case 'b-test-gemini': {
         const statusEl = document.querySelector('#gemini-test-status');
+        if (t.disabled) return;
+        t.disabled = true;
         if (statusEl) statusEl.innerHTML = '<span class="spinner" style="vertical-align:middle"></span> Testing…';
+        // Write the result into whichever status element is on screen now,
+        // in case the view re-rendered while the test was running.
+        const showStatus = html => {
+          const el = document.querySelector('#gemini-test-status');
+          if (el) el.innerHTML = html;
+        };
         testApiKey(metadata?.geminiKey, metadata?.geminiModel || DEFAULT_MODEL)
-          .then(() => {
-            if (statusEl) statusEl.innerHTML = '<span class="chip ok">Connected ✓</span>';
-            toast('Gemini connected successfully!');
+          .then(({ model, switchedFrom }) => {
+            if (switchedFrom) {
+              metadata = metadata || {};
+              metadata.geminiModel = model;
+              commitState({ ledgerDirty: true });
+              toast(`Connected. "${switchedFrom}" isn’t available on your key, so Ledgerline switched to ${model}.`);
+            } else {
+              toast('Gemini connected');
+            }
+            showStatus(`<span class="chip ok">Connected ✓ · ${esc(model)}</span>`);
           })
           .catch(err => {
-            if (statusEl) statusEl.innerHTML = '<span class="chip bad">Error</span>';
-            toast(err.message || 'Connection failed.');
+            const msg = err.message || 'Connection failed.';
+            showStatus(`<span class="chip bad">Not connected</span> <span class="muted" style="font-size:.85rem">${esc(msg)}</span>`);
+            toast(msg);
+          })
+          .finally(() => {
+            const b = document.querySelector('#b-test-gemini');
+            if (b) b.disabled = false;
           });
         return;
       }
