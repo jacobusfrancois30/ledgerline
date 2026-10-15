@@ -1,0 +1,29 @@
+# Dependencies & Builds
+node_modules/
+dist/
+build/
+
+# Secrets & Environment variables
+.env
+.env.*
+*.local
+
+# Operating System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs & temp
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.temp/
+.tmp/
+
+# Editor directories
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
