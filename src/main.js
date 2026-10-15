@@ -53,6 +53,8 @@ import { renderBudgets } from './views/budgets.js';
 import { renderBills, openBillForm } from './views/bills.js';
 import { renderGoals, openGoalForm } from './views/goals.js';
 import { renderSetup, openAccountForm } from './views/setup.js';
+import { renderTax } from './views/tax.js';
+import { taxYearFor, taxYearRange } from './tax.js';
 
 // Application state
 let L = null;               // Ledger: { settings, accounts, categories, bills, goals, rules }
@@ -72,11 +74,12 @@ const uiState = {
 };
 
 const VIEWS = {
-  overview: { title: 'Overview', icon: '<path d="M3 13V8m5 5V4m5 9v-6" />' },
-  transactions: { title: 'Transactions', icon: '<path d="M3 4h10M3 8h10M3 12h6" />' },
-  budgets: { title: 'Budgets', icon: '<path d="M2.5 5.5h11v7h-11z M2.5 5.5l2-2.5h7l2 2.5" />' },
+  overview: { title: 'Overview', short: 'Home', icon: '<path d="M3 13V8m5 5V4m5 9v-6" />' },
+  transactions: { title: 'Transactions', short: 'Activity', icon: '<path d="M3 4h10M3 8h10M3 12h6" />' },
+  budgets: { title: 'Budgets', short: 'Budget', icon: '<path d="M2.5 5.5h11v7h-11z M2.5 5.5l2-2.5h7l2 2.5" />' },
   bills: { title: 'Bills', icon: '<path d="M3.5 2.5h9v11l-2-1.3-2.5 1.3-2.5-1.3-2 1.3z M6 6h4M6 9h4" />' },
   goals: { title: 'Goals', icon: '<circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2.2"/>' },
+  tax: { title: 'Tax', icon: '<path d="M4 1.8h8v12.4H4z"/><path d="M6 5h4M6 7.5h4M6 10h2.5"/>' },
   setup: { title: 'Setup', icon: '<path d="M2.5 4.5h11M2.5 11.5h11"/><circle cx="5.5" cy="4.5" r="1.6"/><circle cx="10.5" cy="11.5" r="1.6"/>' },
 };
 
@@ -219,7 +222,7 @@ function renderTabs() {
       <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         ${v.icon}
       </svg>
-      <span>${v.title}</span>
+      <span class="tab-l">${v.title}</span><span class="tab-s">${v.short || v.title}</span>
     </button>
   `).join('');
 }
@@ -247,7 +250,7 @@ function render() {
   if (mLabelEl) mLabelEl.textContent = mLabel(month, { month: 'short', year: 'numeric' });
 
   const monthNav = document.querySelector('#monthnav');
-  if (monthNav) monthNav.hidden = currentView === 'setup' || currentView === 'goals';
+  if (monthNav) monthNav.hidden = currentView === 'setup' || currentView === 'goals' || currentView === 'tax';
 
   // Banner area (sample data, backup reminders, offline status)
   const bannerContainer = document.querySelector('#banner');
@@ -299,7 +302,9 @@ function render() {
       uiState,
       geminiKey: metadata?.geminiKey,
       geminiModel: metadata?.geminiModel || DEFAULT_MODEL,
-      hasPin: Boolean(metadata?.pinHash)
+      hasPin: Boolean(metadata?.pinHash),
+      taxYear: uiState.taxYear,
+      today: today()
     };
 
     switch (currentView) {
@@ -317,6 +322,9 @@ function render() {
         break;
       case 'goals':
         html = renderGoals(ctx);
+        break;
+      case 'tax':
+        html = renderTax(ctx);
         break;
       case 'setup':
         html = renderSetup(ctx);
@@ -1094,6 +1102,18 @@ function initEventListeners() {
           `ledgerline-${uiState.allMonths ? 'all' : month}.csv`
         );
 
+      case 'b-tax-export': {
+        const year = uiState.taxYear || taxYearFor(today());
+        const { start, end } = taxYearRange(year);
+        const tagged = new Set([
+          ...Object.entries(L.tax.incomeTypes).filter(([, v]) => v !== 'exempt').map(([k]) => k),
+          ...Object.entries(L.tax.deductionTypes).filter(([, v]) => v).map(([k]) => k)
+        ]);
+        const list = T.filter(t => t.date >= start && t.date <= end && tagged.has(t.categoryId));
+        if (!list.length) return toast('No tax-tagged transactions in this tax year');
+        return exportCSV(list, L.categories, L.accounts, `ledgerline-tax-${year}.csv`);
+      }
+
       case 'b-exportall':
         return exportCSV(T, L.categories, L.accounts, 'ledgerline-all-transactions.csv');
 
@@ -1513,6 +1533,24 @@ function initEventListeners() {
         c.rollover = el.checked;
         commitState({ ledgerDirty: true });
       }
+    } else if (el.id === 'tax-year') {
+      uiState.taxYear = Number(el.value);
+      render();
+    } else if (el.id === 'tax-project') {
+      L.tax.project = el.checked;
+      commitState({ ledgerDirty: true });
+    } else if (el.dataset.taxf) {
+      const f = el.dataset.taxf;
+      L.tax[f] = f === 'onMedicalAid' ? el.value === 'true' : f === 'age' ? el.value : Math.max(0, Number(el.value) || 0);
+      commitState({ ledgerDirty: true });
+    } else if (el.dataset.taxy) {
+      const year = uiState.taxYear || taxYearFor(today());
+      L.tax.years[year] = { ...(L.tax.years[year] || {}), [el.dataset.taxy]: Math.max(0, Number(el.value) || 0) };
+      commitState({ ledgerDirty: true });
+    } else if (el.dataset.taxcat) {
+      const map = el.dataset.taxkind === 'income' ? L.tax.incomeTypes : L.tax.deductionTypes;
+      if (el.value) map[el.dataset.taxcat] = el.value; else delete map[el.dataset.taxcat];
+      commitState({ ledgerDirty: true });
     } else if (el.id === 's-cur') {
       L.settings.currency = el.value;
       commitState({ ledgerDirty: true });

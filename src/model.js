@@ -1,6 +1,8 @@
 // src/model.js - Financial models, business logic, calculations, sample data (ZAR default)
 'use strict';
 
+import { defaultTaxSettings } from './tax.js';
+
 export const pad = n => String(n).padStart(2, '0');
 export const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -79,6 +81,7 @@ export function emptyLedger() {
     bills: [],
     goals: [],
     rules: [],
+    tax: defaultTaxSettings(),
   };
 }
 
@@ -92,7 +95,14 @@ export function normalizeLedger(l) {
     categories: (l?.categories && l.categories.length) ? l.categories : base.categories,
     bills: l?.bills || [],
     goals: l?.goals || [],
-    rules: l?.rules || []
+    rules: l?.rules || [],
+    tax: {
+      ...base.tax,
+      ...(l?.tax || {}),
+      incomeTypes: { ...base.tax.incomeTypes, ...(l?.tax?.incomeTypes || {}) },
+      deductionTypes: { ...(l?.tax?.deductionTypes || {}) },
+      years: { ...(l?.tax?.years || {}) }
+    }
   };
 }
 

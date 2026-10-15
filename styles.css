@@ -1115,3 +1115,10 @@ td.payee {
     transition: width 0.4s ease;
   }
 }
+
+/* Bottom tab bar: short labels so 7 tabs fit on a phone */
+.tab-s { display: none; }
+@media (max-width: 780px) {
+  .tab-l { display: none; }
+  .tab-s { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.64rem; }
+}
