@@ -253,7 +253,7 @@ function render() {
           </div>
         </div>
       `;
-    } else if (!backupBannerDismissed && shouldShowBackupReminder(metadata?.lastBackup, metadata?.backupReminderDismissedMonth, ym(today()))) {
+    } else if (!backupBannerDismissed && T.length && shouldShowBackupReminder(metadata?.lastBackup, metadata?.backupReminderDismissedMonth, ym(today()))) {
       bannerHtml += `
         <div class="banner backup-banner">
           <p><b>Backup reminder:</b> It’s been over 30 days since your last backup. Keep your data safe by exporting a copy.</p>
@@ -1273,17 +1273,31 @@ function initEventListeners() {
       case 'b-reset': {
         if (t.dataset.armed) {
           delete t.dataset.armed;
-          t.textContent = 'Erase everything';
-          clearAllData().then(() => {
-            L = sampleLedger();
-            T = sampleTxns();
-            sampleMode = true;
-            metadata = {};
-            currentView = 'overview';
-            setSaveStatus('sample');
-            toast('All data erased. Start fresh or explore sample data.');
-            render();
-          });
+          t.textContent = 'Erasing…';
+          t.disabled = true;
+          // Cancel any save still waiting to run, or it would write old data back
+          clearTimeout(saveTimeout);
+          clearAllData()
+            .then(async () => {
+              // Start from an empty ledger (not sample data) and save it, so a
+              // reload shows the same empty state instead of the sample.
+              L = emptyLedger();
+              T = [];
+              sampleMode = false;
+              metadata = { geminiModel: DEFAULT_MODEL };
+              backupBannerDismissed = false;
+              uiState.q = ''; uiState.cat = ''; uiState.acct = ''; uiState.allMonths = false;
+              await saveLedger(L, { geminiKey: null, geminiModel: DEFAULT_MODEL, pinHash: null });
+              setSaveStatus('saved');
+              navigateTo('overview');
+              toast('Everything erased. Your ledger is empty.');
+            })
+            .catch(err => {
+              console.error('Erase failed:', err);
+              t.disabled = false;
+              t.textContent = 'Erase everything';
+              toast('Couldn’t erase your data. Close other Ledgerline tabs and try again.');
+            });
         } else {
           t.dataset.armed = '1';
           t.textContent = 'Tap again to erase ALL data';
@@ -1542,7 +1556,9 @@ async function boot() {
   if (metadata) {
     if (!metadata.geminiModel || metadata.geminiModel === 'gemini-2.5-flash' || metadata.geminiModel === 'gemini-1.5-flash') {
       metadata.geminiModel = DEFAULT_MODEL;
-      commitState({ ledgerDirty: true });
+      // Only persist for a real ledger; saving here in sample mode would
+      // store the sample data as if it were the user's own.
+      if (!sampleMode) commitState({ ledgerDirty: true });
     }
   }
 
