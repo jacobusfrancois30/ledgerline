@@ -176,7 +176,7 @@ function detectDateOrder(rows, col) {
   return mdy > dmy ? 'mdy' : 'dmy';
 }
 
-const dupKey = (date, amount, payee) => date + '|' + Number(amount).toFixed(2) + '|' + norm(cleanPayee(payee));
+export const dupKey = (date, amount, payee) => date + '|' + Number(amount).toFixed(2) + '|' + norm(cleanPayee(payee));
 
 export function importFlow(text, fileName, { ledger, transactions, onImport }) {
   const rows = parseCSV(text);

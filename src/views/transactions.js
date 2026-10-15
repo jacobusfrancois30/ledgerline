@@ -89,6 +89,7 @@ export function renderTransactions({ ledger, transactions, month, uiState }) {
             💬 Bank SMS
           </button>
           <button class="btn small" id="b-import">Import CSV</button>
+          <button class="btn small" id="b-import-pdf" title="Import FNB or other bank statement PDFs">Import PDF</button>
           <button class="btn small" id="b-export">Export</button>
         </span>
       </div>
@@ -119,7 +120,8 @@ export function renderTransactions({ ledger, transactions, month, uiState }) {
           No transactions match.
           <button class="link" id="b-add2">Add one</button>,
           <button class="link" id="b-scan2">scan a receipt</button>, or
-          <button class="link" id="b-import2">import a bank CSV</button>.
+          <button class="link" id="b-import2">import a bank CSV</button> or
+          <button class="link" id="b-import-pdf2">PDF statements</button>.
         </div>
       `}
     </div>

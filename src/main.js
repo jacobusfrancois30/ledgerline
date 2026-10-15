@@ -34,6 +34,7 @@ import {
 import { toast } from './ui/toast.js';
 import { openSheet, closeSheet, initSheetListeners, fld, catOptions, acctOptions } from './ui/sheet.js';
 import { pickCSV, exportCSV } from './csv.js';
+import { pickPDFs } from './pdf.js';
 import {
   scanReceipt,
   parseBankAlerts,
@@ -1066,6 +1067,19 @@ function initEventListeners() {
         return pickCSV({
           ledger: L,
           transactions: T,
+          onImport: (newTxns) => {
+            T.push(...newTxns);
+            commitState({ updatedTxns: newTxns });
+          }
+        });
+
+      case 'b-import-pdf':
+      case 'b-import-pdf2':
+        return pickPDFs({
+          ledger: L,
+          transactions: T,
+          geminiKey: metadata?.geminiKey,
+          geminiModel: metadata?.geminiModel || DEFAULT_MODEL,
           onImport: (newTxns) => {
             T.push(...newTxns);
             commitState({ updatedTxns: newTxns });
