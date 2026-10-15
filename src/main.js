@@ -16,6 +16,7 @@ import {
   round2,
   uid,
   esc,
+  norm,
   money
 } from './model.js';
 import {
@@ -32,7 +33,7 @@ import {
   verifyPin
 } from './store.js';
 import { toast } from './ui/toast.js';
-import { openSheet, closeSheet, initSheetListeners, fld, catOptions, acctOptions } from './ui/sheet.js';
+import { openSheet, closeSheet, initSheetListeners, fld, catOptions, acctOptions, confirmBtn } from './ui/sheet.js';
 import { pickCSV, exportCSV } from './csv.js';
 import { pickPDFs } from './pdf.js';
 import {
@@ -723,18 +724,22 @@ async function triggerSmartCategorize() {
           const chosenCatId = tr.querySelector('.sc-cat').value;
           const makeRule = tr.querySelector('.sc-rule').checked;
 
-          if (makeRule) {
-            L.rules.push({
-              id: uid(),
-              match: norm(payee),
-              categoryId: chosenCatId
-            });
+          // Gemini sometimes changes a name's spelling or spacing; map it back
+          // to the merchant we sent so the category still lands
+          const n = norm(payee);
+          const sent = uniquePayees.find(p => norm(p) === n)
+            || uniquePayees.find(p => n && (norm(p).includes(n) || n.includes(norm(p))))
+            || payee;
+          const target = norm(sent);
+
+          if (makeRule && target) {
+            L.rules.push({ id: uid(), match: target, categoryId: chosenCatId });
             rulesAdded++;
           }
 
           // Apply to matching uncategorized transactions
           T.forEach(t => {
-            if (!t.categoryId && norm(t.payee) === norm(payee)) {
+            if (!t.categoryId && norm(t.payee) === target) {
               t.categoryId = chosenCatId;
               touchedTxns.push(t);
               updatedCount++;
@@ -744,7 +749,9 @@ async function triggerSmartCategorize() {
 
         commitState({ ledgerDirty: Boolean(rulesAdded), updatedTxns: touchedTxns });
         closeSheet();
-        toast(`${updatedCount} transactions categorized${rulesAdded ? ` · ${rulesAdded} rules saved` : ''}`);
+        toast(updatedCount || rulesAdded
+          ? `${updatedCount} transactions categorized${rulesAdded ? ` · ${rulesAdded} rules saved` : ''}`
+          : 'Nothing was changed. Tick at least one merchant to apply.');
       });
     }, { wide: true });
   } catch (err) {
