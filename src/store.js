@@ -150,7 +150,7 @@ export async function exportBackup(ledger, txns, metadata) {
     ledger,
     transactions: txns,
     metadata: {
-      geminiModel: metadata?.geminiModel || 'gemini-2.5-flash',
+      geminiModel: metadata?.geminiModel || 'gemini-3.8-flash',
       // We do not export the raw PIN hash or secrets for maximum portability and security
     }
   };
@@ -202,7 +202,7 @@ export async function restoreBackup(jsonContent) {
       ledger: parsed.ledger,
       updated: new Date().toISOString(),
       lastBackup: new Date().toISOString(),
-      geminiModel: parsed.metadata?.geminiModel || 'gemini-2.5-flash'
+      geminiModel: parsed.metadata?.geminiModel || 'gemini-3.8-flash'
     };
     ledgerStore.put(record);
 

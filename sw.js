@@ -1,7 +1,7 @@
 // sw.js - Service Worker: Offline support, app shell caching, and update management
 'use strict';
 
-const CACHE_NAME = 'ledgerline-shell-v2';
+const CACHE_NAME = 'ledgerline-shell-v3';
 
 const PRECACHE_ASSETS = [
   './',

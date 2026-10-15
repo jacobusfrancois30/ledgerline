@@ -1,11 +1,11 @@
 // src/gemini.js - Gemini REST API integration for receipt scanning, bank alert parsing, smart categorize, ask money, and monthly review
 'use strict';
 
-export const DEFAULT_MODEL = 'gemini-2.5-flash';
+export const DEFAULT_MODEL = 'gemini-3.8-flash';
 export const AVAILABLE_MODELS = [
-  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Recommended - Fast & Smart)' },
-  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Stable)' },
-  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Legacy)' }
+  { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash (Recommended - Latest & Fast)' },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
+  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' }
 ];
 
 export class GeminiError extends Error {

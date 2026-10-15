@@ -1515,6 +1515,14 @@ async function boot() {
     setSaveStatus('sample');
   }
 
+  // Auto-migrate legacy or empty model setting to gemini-3.8-flash
+  if (metadata) {
+    if (!metadata.geminiModel || metadata.geminiModel === 'gemini-2.5-flash' || metadata.geminiModel === 'gemini-1.5-flash') {
+      metadata.geminiModel = DEFAULT_MODEL;
+      commitState({ ledgerDirty: true });
+    }
+  }
+
   // Check if PIN lock is active
   if (metadata?.pinHash) {
     isLocked = true;

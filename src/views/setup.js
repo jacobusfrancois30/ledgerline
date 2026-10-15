@@ -73,7 +73,7 @@ export function renderSetup({ ledger, transactions, metadata, geminiKey, geminiM
             <label style="font-size:0.88rem;font-weight:600;color:var(--muted)">Model:</label>
             <select id="s-gemini-model" style="max-width:340px">
               ${AVAILABLE_MODELS.map(m => `
-                <option value="${esc(m.id)}"${m.id === (geminiModel || 'gemini-2.5-flash') ? ' selected' : ''}>
+                <option value="${esc(m.id)}"${m.id === (geminiModel || 'gemini-3.8-flash') ? ' selected' : ''}>
                   ${esc(m.name)}
                 </option>
               `).join('')}
