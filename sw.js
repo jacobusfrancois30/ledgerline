@@ -1,7 +1,7 @@
 // sw.js - Service Worker: Offline support, app shell caching, and update management
 'use strict';
 
-const CACHE_NAME = 'ledgerline-shell-v4';
+const CACHE_NAME = 'ledgerline-shell-v6';
 
 const PRECACHE_ASSETS = [
   './',
@@ -89,12 +89,25 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Static assets (CSS, JS, Fonts, Icons): Cache-first with network fallback
+  // JS/CSS: Network-first so code changes are always picked up immediately
+  const isAppAsset = event.request.url.includes('/src/') || event.request.url.endsWith('.css');
+  if (isAppAsset) {
+    event.respondWith(
+      fetch(event.request).then(networkResponse => {
+        if (networkResponse && networkResponse.status === 200) {
+          const copy = networkResponse.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+        }
+        return networkResponse;
+      }).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Other static assets (icons, fonts): Cache-first with network fallback
   event.respondWith(
     caches.match(event.request).then(cachedResponse => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
+      if (cachedResponse) return cachedResponse;
       return fetch(event.request).then(networkResponse => {
         if (
           networkResponse &&

@@ -1203,11 +1203,18 @@ function initEventListeners() {
       }
 
       case 'b-remove-gemini': {
-        confirmBtn(t, 'Tap again to remove', () => {
+        if (t.dataset.armed) {
+          delete t.dataset.armed;
+          t.textContent = 'Remove key';
           if (metadata) metadata.geminiKey = null;
           commitState({ ledgerDirty: true });
           toast('Gemini API key removed');
-        });
+        } else {
+          t.dataset.armed = '1';
+          const orig = t.textContent;
+          t.textContent = 'Tap again to remove';
+          setTimeout(() => { if (t.isConnected) { delete t.dataset.armed; t.textContent = orig; } }, 3500);
+        }
         return;
       }
 
@@ -1248,24 +1255,40 @@ function initEventListeners() {
       }
 
       case 'b-remove-pin': {
-        confirmBtn(t, 'Tap again to remove', () => {
+        if (t.dataset.armed) {
+          delete t.dataset.armed;
+          t.textContent = 'Remove PIN';
           if (metadata) metadata.pinHash = null;
           commitState({ ledgerDirty: true });
           toast('PIN lock disabled');
-        });
+        } else {
+          t.dataset.armed = '1';
+          const orig = t.textContent;
+          t.textContent = 'Tap again to remove';
+          setTimeout(() => { if (t.isConnected) { delete t.dataset.armed; t.textContent = orig; } }, 3500);
+        }
         return;
       }
 
       case 'b-reset': {
-        confirmBtn(t, 'Tap again to erase all data', async () => {
-          await clearAllData();
-          L = emptyLedger();
-          T = [];
-          sampleMode = false;
-          metadata = null;
-          toast('All data erased');
-          render();
-        });
+        if (t.dataset.armed) {
+          delete t.dataset.armed;
+          t.textContent = 'Erase everything';
+          clearAllData().then(() => {
+            L = sampleLedger();
+            T = sampleTxns();
+            sampleMode = true;
+            metadata = {};
+            currentView = 'overview';
+            setSaveStatus('sample');
+            toast('All data erased. Start fresh or explore sample data.');
+            render();
+          });
+        } else {
+          t.dataset.armed = '1';
+          t.textContent = 'Tap again to erase ALL data';
+          setTimeout(() => { if (t.isConnected) { delete t.dataset.armed; t.textContent = 'Erase everything'; } }, 3500);
+        }
         return;
       }
     }
