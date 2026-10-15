@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Ledgerline</title>
+  <meta name="description" content="Personal budgeting and spending tracker with Gemini AI">
+
+  <!-- PWA & Mobile Web App Meta -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#edf1ef">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e1412">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Ledgerline">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="icons/favicon.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <nav class="rail" aria-label="Sections">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 16 16">
+            <path d="M3 2v12h10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M6.5 10.5l2.5-3 2 2 2.5-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <b>Ledgerline</b>
+      </div>
+      <div id="tabs" style="display:contents"></div>
+      <div class="rail-foot muted">
+        <span class="save-pill" id="savepill" data-s="connecting">
+          <i></i><span>Connecting…</span>
+        </span>
+      </div>
+    </nav>
+    <main>
+      <header class="top">
+        <h1 id="vtitle">Overview</h1>
+        <div class="monthnav" id="monthnav">
+          <button id="mprev" aria-label="Previous month">‹</button>
+          <span id="mlabel" class="num"></span>
+          <button id="mnext" aria-label="Next month">›</button>
+        </div>
+        <button class="btn primary" id="addtxn">+ Transaction</button>
+      </header>
+      <div id="banner"></div>
+      <section id="view"></section>
+    </main>
+  </div>
+
+  <div id="overlay" class="overlay" hidden></div>
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <!-- App Entry Point -->
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
