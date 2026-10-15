@@ -4,8 +4,8 @@
 export const DEFAULT_MODEL = 'gemini-3.8-flash';
 export const AVAILABLE_MODELS = [
   { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash (Recommended - Latest & Fast)' },
-  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
-  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' }
+  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Stable Fallback)' },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' }
 ];
 
 export class GeminiError extends Error {
@@ -19,6 +19,8 @@ export class GeminiError extends Error {
 /**
  * Core caller for Gemini REST generateContent API
  */
+const sleep = ms => new Promise(res => setTimeout(res, ms));
+
 export async function callGemini({
   apiKey,
   model = DEFAULT_MODEL,
@@ -26,7 +28,8 @@ export async function callGemini({
   systemInstruction,
   generationConfig,
   stream = false,
-  onChunk
+  onChunk,
+  retryCount = 0
 }) {
   if (!navigator.onLine) {
     throw new GeminiError('You appear to be offline. Connect to the internet to use AI features.', 'OFFLINE');
@@ -68,6 +71,21 @@ export async function callGemini({
     throw new GeminiError('Network error connecting to Gemini API. Check your internet connection.', 'NETWORK_ERROR');
   }
 
+  // Handle transient 503 (high demand) or 429 with automatic retry
+  if (!response.ok && (response.status === 503 || response.status === 429) && retryCount < 2) {
+    await sleep(1500 * (retryCount + 1));
+    return callGemini({
+      apiKey,
+      model,
+      contents,
+      systemInstruction,
+      generationConfig,
+      stream,
+      onChunk,
+      retryCount: retryCount + 1
+    });
+  }
+
   if (!response.ok) {
     let errData = {};
     try {
@@ -79,6 +97,8 @@ export async function callGemini({
       throw new GeminiError('Invalid Gemini API key or access denied. Check your key in Setup.', 'AUTH_ERROR');
     } else if (response.status === 429) {
       throw new GeminiError('Gemini rate limit exceeded. Please wait a minute and try again.', 'RATE_LIMIT');
+    } else if (response.status === 503) {
+      throw new GeminiError('Google servers are momentarily busy (503). Retrying in a few moments, or select Gemini 2.0 Flash in the Model dropdown below.', 'HIGH_DEMAND');
     } else {
       throw new GeminiError(`Gemini error (${response.status}): ${errMessage}`, 'API_ERROR');
     }
